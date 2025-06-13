@@ -24,9 +24,6 @@ on:
         type: string
         default: '9794'
     secrets:
-      GITHUB_TOKEN:
-        description: 'GitHub token'
-        required: true
       SERVER_USER:
         description: 'SSH username'
         required: true
