@@ -34,10 +34,6 @@ on:
         description: 'SSH password'
         required: true
 
-permissions:
-  contents: read
-  packages: write
-
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
