@@ -1,0 +1,117 @@
+name: Reusable Spring Boot Deploy Workflow
+
+on:
+  workflow_call:
+    inputs:
+      java_version:
+        description: 'Java version to use'
+        required: false
+        type: string
+        default: '21'
+      maven_version:
+        description: 'Maven version to use'
+        required: false
+        type: string
+        default: '3.8.1'
+      spring_profile:
+        description: 'Spring profile to activate'
+        required: false
+        type: string
+        default: 'prod'
+      app_port:
+        description: 'Application port'
+        required: false
+        type: string
+        default: '9794'
+    secrets:
+      GITHUB_TOKEN:
+        description: 'GitHub token'
+        required: true
+      SERVER_USER:
+        description: 'SSH username'
+        required: true
+      SERVER_IP:
+        description: 'Server IP address'
+        required: true
+      SERVER_SSH_PASSWORD:
+        description: 'SSH password'
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      SERVICE_NAME: ${{ github.event.repository.name }}
+      RAW_DOCKER_IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
+      APP_PORT: ${{ inputs.app_port }}
+      SPRING_PROFILE: ${{ inputs.spring_profile }}
+      # GitHub Secrets
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SERVER_USER: ${{ secrets.SERVER_USER }}
+      SERVER_IP: ${{ secrets.SERVER_IP }}
+      SERVER_SSH_PASSWORD: ${{ secrets.SERVER_SSH_PASSWORD }}
+
+    steps:
+      - name: downcase REPO
+        run: |
+          echo "DOCKER_IMAGE=${RAW_DOCKER_IMAGE,,}" >>${GITHUB_ENV}
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ inputs.java_version }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ inputs.java_version }}
+
+      - name: Set up Maven
+        uses: stCarolas/setup-maven@v5
+        with:
+          maven-version: ${{ inputs.maven_version }}
+
+      - name: Build and run unit tests with Maven
+        run: mvn clean compile package
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ env.DOCKER_IMAGE }} .
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ env.GITHUB_TOKEN }}
+
+      - name: Push Docker image to GHCR
+        run: |
+          docker push ${{ env.DOCKER_IMAGE }}
+
+      - name: Deploy to Server
+        run: |
+          # Cài đặt sshpass để sử dụng mật khẩu SSH
+          sudo apt-get install -y sshpass
+          
+          # Tạo file SSH known_hosts để không bị hỏi xác nhận host
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.SERVER_IP }} >> ~/.ssh/known_hosts
+          
+          # SSH vào server, pull Docker image từ GHCR và chạy container
+          sshpass -p ${{ env.SERVER_SSH_PASSWORD }} ssh ${{ env.SERVER_USER }}@${{ env.SERVER_IP }} << 'EOF'
+            docker login ghcr.io -u ${{ github.actor }} -p ${{ env.GITHUB_TOKEN }}
+            docker network create --driver bridge ${{ env.SERVICE_NAME }}_network || true
+            docker pull ${{ env.DOCKER_IMAGE }}
+            docker stop ${{ env.SERVICE_NAME }} || true
+            docker rm ${{ env.SERVICE_NAME }} || true
+            docker run --restart always -d --name ${{ env.SERVICE_NAME }} \
+            -v /var/log:/var/log \
+            --network ${{ env.SERVICE_NAME }}_network \
+            -p ${{ env.APP_PORT }}:${{ env.APP_PORT }} \
+            -e SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILE }} \
+            ${{ env.DOCKER_IMAGE }}
+          EOF
