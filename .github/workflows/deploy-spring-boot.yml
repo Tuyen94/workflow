@@ -8,11 +8,6 @@ on:
         required: false
         type: string
         default: '21'
-      maven_version:
-        description: 'Maven version to use'
-        required: false
-        type: string
-        default: '3.8.1'
       spring_profile:
         description: 'Spring profile to activate'
         required: false
@@ -62,20 +57,26 @@ jobs:
           distribution: 'temurin'
           java-version: ${{ inputs.java_version }}
 
-      - name: Set up Maven
-        uses: stCarolas/setup-maven@v5
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
         with:
-          maven-version: ${{ inputs.maven_version }}
+          path: ~/.m2
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Verify Maven installation
+        run: mvn --version
 
       - name: Build and run unit tests with Maven
-        run: mvn clean compile package
+        run: mvn clean compile test package -DskipTests=false
 
       - name: Build Docker image
         run: |
           docker build -t ${{ env.DOCKER_IMAGE }} .
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -96,15 +97,32 @@ jobs:
           
           # SSH vào server, pull Docker image từ GHCR và chạy container
           sshpass -p ${{ env.SERVER_SSH_PASSWORD }} ssh ${{ env.SERVER_USER }}@${{ env.SERVER_IP }} << 'EOF'
-            docker login ghcr.io -u ${{ github.actor }} -p ${{ env.GITHUB_TOKEN }}
+            # Login to GHCR
+            echo ${{ env.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Create network if not exists
             docker network create --driver bridge ${{ env.SERVICE_NAME }}_network || true
+
+            # Pull latest image
             docker pull ${{ env.DOCKER_IMAGE }}
+
+            # Stop and remove existing container
             docker stop ${{ env.SERVICE_NAME }} || true
             docker rm ${{ env.SERVICE_NAME }} || true
+
+            # Run new container with health check
             docker run --restart always -d --name ${{ env.SERVICE_NAME }} \
-            -v /var/log:/var/log \
-            --network ${{ env.SERVICE_NAME }}_network \
-            -p ${{ env.APP_PORT }}:${{ env.APP_PORT }} \
-            -e SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILE }} \
-            ${{ env.DOCKER_IMAGE }}
+              -v /var/log:/var/log \
+              --network ${{ env.SERVICE_NAME }}_network \
+              -p ${{ env.APP_PORT }}:${{ env.APP_PORT }} \
+              -e SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILE }} \
+              --health-cmd="curl -f http://localhost:${{ env.APP_PORT }}/actuator/health || exit 1" \
+              --health-interval=30s \
+              --health-timeout=10s \
+              --health-retries=3 \
+              ${{ env.DOCKER_IMAGE }}
+
+            # Wait for container to be healthy
+            echo "Waiting for container to be healthy..."
+            timeout 120 sh -c 'until docker inspect --format="{{.State.Health.Status}}" ${{ env.SERVICE_NAME }} | grep -q "healthy"; do sleep 5; done' || echo "Health check timeout - container may still be starting"
           EOF
