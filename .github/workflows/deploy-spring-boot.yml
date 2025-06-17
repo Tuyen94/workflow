@@ -117,12 +117,12 @@ jobs:
               -p ${{ env.APP_PORT }}:${{ env.APP_PORT }} \
               -e SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILE }} \
               --health-cmd="curl -f http://localhost:${{ env.APP_PORT }}/actuator/health || exit 1" \
-              --health-interval=30s \
+              --health-interval=5s \
               --health-timeout=10s \
-              --health-retries=3 \
+              --health-retries=12 \
               ${{ env.DOCKER_IMAGE }}
 
             # Wait for container to be healthy
             echo "Waiting for container to be healthy..."
-            timeout 120 sh -c 'until docker inspect --format="{{.State.Health.Status}}" ${{ env.SERVICE_NAME }} | grep -q "healthy"; do sleep 5; done' || echo "Health check timeout - container may still be starting"
+            timeout 60 sh -c 'until docker inspect --format="{{.State.Health.Status}}" ${{ env.SERVICE_NAME }} | grep -q "healthy"; do sleep 5; done' || echo "Health check timeout - container may still be starting"
           EOF
