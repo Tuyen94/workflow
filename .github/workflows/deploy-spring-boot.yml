@@ -69,7 +69,7 @@ jobs:
         run: mvn --version
 
       - name: Build and run unit tests with Maven
-        run: mvn clean compile test package -DskipTests=false
+        run: mvn package -U -B
 
       - name: Build Docker image
         run: |
