@@ -112,6 +112,7 @@ jobs:
 
             # Run new container with health check
             docker run --restart always -d --name ${{ env.SERVICE_NAME }} \
+              --add-host=host.docker.internal:host-gateway \
               -v /var/log:/var/log \
               --network ${{ env.SERVICE_NAME }}_network \
               -p ${{ env.APP_PORT }}:${{ env.APP_PORT }} \
