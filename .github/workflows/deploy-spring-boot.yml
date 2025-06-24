@@ -34,7 +34,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SERVICE_NAME: ${{ github.event.repository.name }}
-      RAW_DOCKER_IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
       APP_PORT: ${{ inputs.app_port }}
       SPRING_PROFILE: ${{ inputs.spring_profile }}
       # GitHub Secrets
@@ -44,9 +43,10 @@ jobs:
       SERVER_SSH_PASSWORD: ${{ secrets.SERVER_SSH_PASSWORD }}
 
     steps:
-      - name: downcase REPO
+      - name: Set short SHA and downcase REPO
         run: |
-          echo "DOCKER_IMAGE=${RAW_DOCKER_IMAGE,,}" >>${GITHUB_ENV}
+          echo "SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-8)" >> ${GITHUB_ENV}
+          echo "DOCKER_IMAGE=ghcr.io/${{ github.repository }}:$(echo ${{ github.sha }} | cut -c1-8)" | tr '[:upper:]' '[:lower:]' >> ${GITHUB_ENV}
 
       - name: Checkout code
         uses: actions/checkout@v4
