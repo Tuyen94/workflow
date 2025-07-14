@@ -78,7 +78,7 @@ jobs:
                       <repositories>
                           <repository>
                               <id>central</id>
-                              <url>https://repo.maven.apache.org/maven2</url>
+                              <url>https://repo.maven.apache.org/maven22222222</url>
                           </repository>
                           <repository>
                               <id>github</id>
