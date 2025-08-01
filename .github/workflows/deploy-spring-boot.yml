@@ -23,6 +23,11 @@ on:
         required: false
         type: string
         default: ''
+      docker_network:
+        description: 'Docker network name'
+        required: false
+        type: string
+        default: ''
     secrets:
       SERVER_USER:
         description: 'SSH username'
@@ -42,6 +47,7 @@ jobs:
       APP_PORT: ${{ inputs.app_port }}
       SPRING_PROFILE: ${{ inputs.spring_profile }}
       ADDITIONAL_VOLUMES: ${{ inputs.additional_volumes }}
+      DOCKER_NETWORK: ${{ inputs.docker_network }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       SERVER_USER: ${{ secrets.SERVER_USER }}
       SERVER_IP: ${{ secrets.SERVER_IP }}
@@ -122,8 +128,10 @@ jobs:
             # Login to GHCR
             echo ${{ env.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            # Create network if not exists
-            docker network create --driver bridge ${{ env.SERVICE_NAME }}_network || true
+            # Create network if not exists (only if network name is provided)
+            if [ -n "${{ env.DOCKER_NETWORK }}" ]; then
+              docker network create --driver bridge ${{ env.DOCKER_NETWORK }} || true
+            fi
 
             # Pull latest image
             docker pull ${{ env.DOCKER_IMAGE }}
@@ -133,11 +141,16 @@ jobs:
             docker rm ${{ env.SERVICE_NAME }} || true
 
             # Run new container with health check
+            NETWORK_PARAM=""
+            if [ -n "${{ env.DOCKER_NETWORK }}" ]; then
+              NETWORK_PARAM="--network ${{ env.DOCKER_NETWORK }}"
+            fi
+
             docker run --restart always -d --name ${{ env.SERVICE_NAME }} \
               --add-host=host.docker.internal:host-gateway \
               -v /var/log:/var/log \
               ${{ env.ADDITIONAL_VOLUMES }} \
-              --network ${{ env.SERVICE_NAME }}_network \
+              ${NETWORK_PARAM} \
               -p ${{ env.APP_PORT }}:${{ env.APP_PORT }} \
               -e SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILE }} \
               --health-cmd="curl -f http://localhost:${{ env.APP_PORT }}/actuator/health || exit 1" \
