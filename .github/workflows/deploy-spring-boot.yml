@@ -18,6 +18,11 @@ on:
         required: false
         type: string
         default: '9794'
+      additional_volumes:
+        description: 'Additional volume mounts (space-separated, e.g., "-v /host/path1:/container/path1 -v /host/path2:/container/path2")'
+        required: false
+        type: string
+        default: ''
     secrets:
       SERVER_USER:
         description: 'SSH username'
@@ -36,6 +41,7 @@ jobs:
       SERVICE_NAME: ${{ github.event.repository.name }}
       APP_PORT: ${{ inputs.app_port }}
       SPRING_PROFILE: ${{ inputs.spring_profile }}
+      ADDITIONAL_VOLUMES: ${{ inputs.additional_volumes }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       SERVER_USER: ${{ secrets.SERVER_USER }}
       SERVER_IP: ${{ secrets.SERVER_IP }}
@@ -130,6 +136,7 @@ jobs:
             docker run --restart always -d --name ${{ env.SERVICE_NAME }} \
               --add-host=host.docker.internal:host-gateway \
               -v /var/log:/var/log \
+              ${{ env.ADDITIONAL_VOLUMES }} \
               --network ${{ env.SERVICE_NAME }}_network \
               -p ${{ env.APP_PORT }}:${{ env.APP_PORT }} \
               -e SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILE }} \
