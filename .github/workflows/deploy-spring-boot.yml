@@ -28,6 +28,11 @@ on:
         required: false
         type: string
         default: ''
+      base_path:
+        description: 'Base path for actuator endpoints (optional, defaults to service name)'
+        required: false
+        type: string
+        default: ''
     secrets:
       SERVER_USER:
         description: 'SSH username'
@@ -48,6 +53,7 @@ jobs:
       SPRING_PROFILE: ${{ inputs.spring_profile }}
       ADDITIONAL_VOLUMES: ${{ inputs.additional_volumes }}
       DOCKER_NETWORK: ${{ inputs.docker_network }}
+      BASE_PATH: ${{ inputs.base_path || github.event.repository.name }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       SERVER_USER: ${{ secrets.SERVER_USER }}
       SERVER_IP: ${{ secrets.SERVER_IP }}
@@ -153,7 +159,7 @@ jobs:
               ${NETWORK_PARAM} \
               -p ${{ env.APP_PORT }}:${{ env.APP_PORT }} \
               -e SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILE }} \
-              --health-cmd="curl -f http://localhost:${{ env.APP_PORT }}/actuator/health || exit 1" \
+              --health-cmd="curl -f http://localhost:${{ env.APP_PORT }}/${{ env.BASE_PATH }}/actuator/health || exit 1" \
               --health-interval=5s \
               --health-timeout=10s \
               --health-retries=12 \
