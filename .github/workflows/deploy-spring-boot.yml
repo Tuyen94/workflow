@@ -152,6 +152,13 @@ jobs:
               NETWORK_PARAM="--network ${{ env.DOCKER_NETWORK }}"
             fi
 
+            # Handle BASE_PATH with or without leading slash
+            BASE_PATH_CLEAN="${{ env.BASE_PATH }}"
+            if [[ "$BASE_PATH_CLEAN" == /* ]]; then
+              # BASE_PATH already starts with /, remove the leading slash for URL construction
+              BASE_PATH_CLEAN="${BASE_PATH_CLEAN#/}"
+            fi
+
             docker run --restart always -d --name ${{ env.SERVICE_NAME }} \
               --add-host=host.docker.internal:host-gateway \
               -v /var/log:/var/log \
@@ -159,7 +166,7 @@ jobs:
               ${NETWORK_PARAM} \
               -p ${{ env.APP_PORT }}:${{ env.APP_PORT }} \
               -e SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILE }} \
-              --health-cmd="curl -f http://localhost:${{ env.APP_PORT }}/${{ env.BASE_PATH }}/actuator/health || exit 1" \
+              --health-cmd="curl -f http://localhost:${{ env.APP_PORT }}/${BASE_PATH_CLEAN}/actuator/health || exit 1" \
               --health-interval=5s \
               --health-timeout=10s \
               --health-retries=12 \
