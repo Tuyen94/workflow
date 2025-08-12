@@ -172,7 +172,20 @@ jobs:
               --health-retries=8 \
               ${{ env.DOCKER_IMAGE }}
 
-            # Wait for container to be healthy
-            echo "Waiting for container to be healthy..."
-            timeout 45 sh -c 'until docker inspect --format="{{.State.Health.Status}}" ${{ env.SERVICE_NAME }} | grep -q "healthy"; do sleep 5; done' || echo "Health check timeout - container may still be starting"
           EOF
+
+      - name: Wait and Verify Container Health
+        run: |
+          echo "Waiting for container to be healthy..."
+          timeout 45 sh -c 'until docker inspect --format="{{.State.Health.Status}}" ${{ env.SERVICE_NAME }} | grep -q "healthy"; do sleep 5; done'
+
+          # Check if container is healthy
+          HEALTH_STATUS=$(docker inspect --format="{{.State.Health.Status}}" ${{ env.SERVICE_NAME }})
+          echo "Health status: $HEALTH_STATUS"
+
+          if [ "$HEALTH_STATUS" = "healthy" ]; then
+            echo "✅ Container is healthy"
+          else
+            echo "❌ Container is not healthy"
+            exit 1
+          fi
