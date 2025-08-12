@@ -169,10 +169,10 @@ jobs:
               --health-cmd="curl -f http://localhost:${{ env.APP_PORT }}/${BASE_PATH_CLEAN}/actuator/health || exit 1" \
               --health-interval=5s \
               --health-timeout=10s \
-              --health-retries=12 \
+              --health-retries=8 \
               ${{ env.DOCKER_IMAGE }}
 
             # Wait for container to be healthy
             echo "Waiting for container to be healthy..."
-            timeout 60 sh -c 'until docker inspect --format="{{.State.Health.Status}}" ${{ env.SERVICE_NAME }} | grep -q "healthy"; do sleep 5; done' || echo "Health check timeout - container may still be starting"
+            timeout 45 sh -c 'until docker inspect --format="{{.State.Health.Status}}" ${{ env.SERVICE_NAME }} | grep -q "healthy"; do sleep 5; done' || echo "Health check timeout - container may still be starting"
           EOF
