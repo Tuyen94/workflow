@@ -176,16 +176,19 @@ jobs:
 
       - name: Wait and Verify Container Health
         run: |
-          echo "Waiting for container to be healthy..."
-          timeout 45 sh -c 'until docker inspect --format="{{.State.Health.Status}}" ${{ env.SERVICE_NAME }} | grep -q "healthy"; do sleep 5; done'
+          sshpass -p "${{ env.SERVER_SSH_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${{ env.SERVER_USER }}@${{ env.SERVER_IP }} << 'EOF'
+            echo "Checking if container exists..."
+            docker ps -a --filter "name=${{ env.SERVICE_NAME }}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
-          # Check if container is healthy
-          HEALTH_STATUS=$(docker inspect --format="{{.State.Health.Status}}" ${{ env.SERVICE_NAME }})
-          echo "Health status: $HEALTH_STATUS"
+            echo "Waiting for container to be healthy..."
+            timeout 45 sh -c 'until docker inspect --format="{{.State.Health.Status}}" ${{ env.SERVICE_NAME }} 2>/dev/null | grep -q "healthy"; do sleep 5; done'
 
-          if [ "$HEALTH_STATUS" = "healthy" ]; then
-            echo "✅ Container is healthy"
-          else
-            echo "❌ Container is not healthy"
-            exit 1
-          fi
+            # Check if container is healthy
+            HEALTH_STATUS=$(docker inspect --format="{{.State.Health.Status}}" ${{ env.SERVICE_NAME }})
+            if [ "$HEALTH_STATUS" = "healthy" ]; then
+              echo "✅ Container is healthy"
+            else
+              echo "❌ Container is not healthy"
+              exit 1
+            fi
+          EOF
