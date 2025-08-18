@@ -75,6 +75,13 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ inputs.java_version }}
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
 
       - name: Configure Maven settings.xml for GitHub Packages
         run: |
@@ -90,14 +97,6 @@ jobs:
             </servers>
           </settings>
           EOF
-
-      - name: Cache Maven dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
 
       - name: Verify Maven installation
         run: mvn --version
