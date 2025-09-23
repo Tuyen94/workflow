@@ -180,7 +180,7 @@ jobs:
             docker ps -a --filter "name=${{ env.SERVICE_NAME }}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
             echo "Waiting for container to be healthy..."
-            timeout 45 sh -c 'until docker inspect --format="{{.State.Health.Status}}" ${{ env.SERVICE_NAME }} 2>/dev/null | grep -q "healthy"; do sleep 5; done'
+            timeout 90 sh -c 'until docker inspect --format="{{.State.Health.Status}}" ${{ env.SERVICE_NAME }} 2>/dev/null | grep -q "healthy"; do sleep 5; done'
 
             # Check if container is healthy
             HEALTH_STATUS=$(docker inspect --format="{{.State.Health.Status}}" ${{ env.SERVICE_NAME }})
