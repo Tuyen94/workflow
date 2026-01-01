@@ -53,7 +53,7 @@ jobs:
       SPRING_PROFILE: ${{ inputs.spring_profile }}
       ADDITIONAL_VOLUMES: ${{ inputs.additional_volumes }}
       DOCKER_NETWORK: ${{ inputs.docker_network }}
-      BASE_PATH: ${{ inputs.base_path || github.event.repository.name }}
+      BASE_PATH: ${{ inputs.base_path }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       SERVER_USER: ${{ secrets.SERVER_USER }}
       SERVER_IP: ${{ secrets.SERVER_IP }}
@@ -151,12 +151,18 @@ jobs:
               NETWORK_PARAM="--network ${{ env.DOCKER_NETWORK }}"
             fi
 
-            # Handle BASE_PATH with or without leading slash
-            BASE_PATH_CLEAN="${{ env.BASE_PATH }}"
-            if [[ "$BASE_PATH_CLEAN" == /* ]]; then
-              # BASE_PATH already starts with /, remove the leading slash for URL construction
-              BASE_PATH_CLEAN="${BASE_PATH_CLEAN#/}"
+            # Build health check URL based on BASE_PATH
+            HEALTH_CHECK_URL="http://localhost:${{ env.APP_PORT }}"
+            if [ -n "${{ env.BASE_PATH }}" ]; then
+              # Handle BASE_PATH with or without leading slash
+              BASE_PATH_CLEAN="${{ env.BASE_PATH }}"
+              if [[ "$BASE_PATH_CLEAN" == /* ]]; then
+                # BASE_PATH already starts with /, remove the leading slash for URL construction
+                BASE_PATH_CLEAN="${BASE_PATH_CLEAN#/}"
+              fi
+              HEALTH_CHECK_URL="${HEALTH_CHECK_URL}/${BASE_PATH_CLEAN}"
             fi
+            HEALTH_CHECK_URL="${HEALTH_CHECK_URL}/actuator/health/liveness"
 
             docker run --restart always -d --name ${{ env.SERVICE_NAME }} \
               --add-host=host.docker.internal:host-gateway \
@@ -165,7 +171,7 @@ jobs:
               ${NETWORK_PARAM} \
               -p ${{ env.APP_PORT }}:${{ env.APP_PORT }} \
               -e SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILE }} \
-              --health-cmd="curl -f http://localhost:${{ env.APP_PORT }}/${BASE_PATH_CLEAN}/actuator/health || exit 1" \
+              --health-cmd="wget --no-verbose --tries=1 --spider ${HEALTH_CHECK_URL} || exit 1" \
               --health-interval=5s \
               --health-timeout=10s \
               --health-retries=8 \
