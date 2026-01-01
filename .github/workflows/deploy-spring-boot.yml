@@ -151,19 +151,6 @@ jobs:
               NETWORK_PARAM="--network ${{ env.DOCKER_NETWORK }}"
             fi
 
-            # Build health check URL based on BASE_PATH
-            HEALTH_CHECK_URL="http://localhost:${{ env.APP_PORT }}"
-            if [ -n "${{ env.BASE_PATH }}" ]; then
-              # Handle BASE_PATH with or without leading slash
-              BASE_PATH_CLEAN="${{ env.BASE_PATH }}"
-              if [[ "$BASE_PATH_CLEAN" == /* ]]; then
-                # BASE_PATH already starts with /, remove the leading slash for URL construction
-                BASE_PATH_CLEAN="${BASE_PATH_CLEAN#/}"
-              fi
-              HEALTH_CHECK_URL="${HEALTH_CHECK_URL}/${BASE_PATH_CLEAN}"
-            fi
-            HEALTH_CHECK_URL="${HEALTH_CHECK_URL}/actuator/health/liveness"
-
             docker run --restart always -d --name ${{ env.SERVICE_NAME }} \
               --add-host=host.docker.internal:host-gateway \
               -v /var/log:/var/log \
@@ -171,10 +158,6 @@ jobs:
               ${NETWORK_PARAM} \
               -p ${{ env.APP_PORT }}:${{ env.APP_PORT }} \
               -e SPRING_PROFILES_ACTIVE=${{ env.SPRING_PROFILE }} \
-              --health-cmd="wget --no-verbose --tries=1 --spider ${HEALTH_CHECK_URL} || exit 1" \
-              --health-interval=5s \
-              --health-timeout=10s \
-              --health-retries=8 \
               ${{ env.DOCKER_IMAGE }}
 
           EOF
@@ -185,15 +168,35 @@ jobs:
             echo "Checking if container exists..."
             docker ps -a --filter "name=${{ env.SERVICE_NAME }}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
-            echo "Waiting for container to be healthy..."
-            timeout 240 sh -c 'until docker inspect --format="{{.State.Health.Status}}" ${{ env.SERVICE_NAME }} 2>/dev/null | grep -q "healthy"; do sleep 10; done'
-
-            # Check if container is healthy
-            HEALTH_STATUS=$(docker inspect --format="{{.State.Health.Status}}" ${{ env.SERVICE_NAME }})
-            if [ "$HEALTH_STATUS" = "healthy" ]; then
-              echo "✅ Container is healthy"
-            else
-              echo "❌ Container is not healthy"
-              exit 1
+            # Build health check URL
+            BASE_PATH_CLEAN="${{ env.BASE_PATH }}"
+            if [[ "$BASE_PATH_CLEAN" == /* ]]; then
+              BASE_PATH_CLEAN="${BASE_PATH_CLEAN#/}"
             fi
+
+            if [ -n "$BASE_PATH_CLEAN" ]; then
+              HEALTH_URL="http://localhost:${{ env.APP_PORT }}/${BASE_PATH_CLEAN}/actuator/health/liveness"
+            else
+              HEALTH_URL="http://localhost:${{ env.APP_PORT }}/actuator/health/liveness"
+            fi
+
+            echo "Waiting for application to be ready..."
+            echo "Health check URL: ${HEALTH_URL}"
+
+            RETRY_COUNT=0
+            MAX_RETRIES=48
+            until curl -f -s "${HEALTH_URL}" > /dev/null 2>&1; do
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+                echo "❌ Application failed to become healthy after $((MAX_RETRIES * 5)) seconds"
+                echo "Container logs:"
+                docker logs --tail 50 ${{ env.SERVICE_NAME }}
+                exit 1
+              fi
+              echo "Waiting for application to start... (attempt $RETRY_COUNT/$MAX_RETRIES)"
+              sleep 5
+            done
+
+            echo "✅ Application is healthy"
+            curl -s "${HEALTH_URL}" | head -n 5
           EOF
